@@ -1,8 +1,8 @@
+import { Waiter } from '@hermes-project/custom-promises'
 import { randomBytes } from 'crypto'
 import execa from 'execa'
 import fs from 'fs'
 import path from 'path'
-import rimraf from 'rimraf'
 import { getTestFilesPath } from '.'
 
 const getScriptPath = (scriptName: string) => {
@@ -42,14 +42,14 @@ export class TestFileManager {
   public files: [string, number, string][]
 
   constructor(testName: string) {
-    this.subfolder = `${testName}-${randomBytes(8).toString('hex')}`
+    this.subfolder = getTestFilesPath(`${testName}-${randomBytes(16).toString('hex')}`)
     this.files = []
     this.promisesPending = []
   }
 
   public cleanUpTestFiles = () => {
     try {
-      rimraf.sync(getTestFilesPath(this.subfolder))
+      execa.sync('rm', ['-rf', this.subfolder])
     } catch (err) {
       console.error('[cleanUpTestFiles]', err)
       throw err
@@ -58,7 +58,7 @@ export class TestFileManager {
 
   public createTextFile = ({ text, repeats, testname }: CreateTextFileArgs) => {
     const rep = repeats ? repeats : 1
-    const filePath = path.join(getTestFilesPath(this.subfolder), `${testname}.txt.test.tmp`)
+    const filePath = path.join(this.subfolder, `${testname}.txt.test.tmp`)
 
     const proc = execa.sync(getScriptPath('generateStringFile.sh'), [
       '-r',
@@ -80,7 +80,7 @@ export class TestFileManager {
     const sizeKB = Math.ceil(Math.random() * (max - min) + min)
     const sizeMB = sizeKB / 1000
     const sizeBytes = sizeKB * 1000
-    const filePath = path.join(getTestFilesPath(this.subfolder), `${sizeMB}.test.tmp`)
+    const filePath = path.join(this.subfolder, `${sizeMB}.test.tmp`)
     const proc = execa.sync(getScriptPath('generateStreamFile.sh'), [
       ...(zero ? ['-z'] : []),
       filePath,
@@ -96,13 +96,21 @@ export class TestFileManager {
     return Promise.all(this.promisesPending)
   }
 
-  public getWriteStream = () => {
-    const filepath = path.join(getTestFilesPath(this.subfolder), randomBytes(8).toString('hex'))
+  public getWriteStream = async () => {
+    const ready = new Waiter()
+    const filepath = path.join(this.subfolder, randomBytes(16).toString('hex'))
     const file = fs.createWriteStream(filepath)
     file.on('error', err => {
-      console.error(`Error on write stream ${filepath}`, err)
+      console.error(`[TestFileManager] Error on write stream ${filepath}`, err)
+      ready.reject(err)
       throw err
     })
+
+    file.on('open', () => {
+      ready.resolve()
+    })
+
+    await ready.finish()
     return {
       filepath,
       file,

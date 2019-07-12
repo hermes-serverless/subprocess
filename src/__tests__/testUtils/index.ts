@@ -1,3 +1,4 @@
+import { Waiter } from '@hermes-project/custom-promises'
 import fs from 'fs'
 import md5 from 'md5-file'
 import os from 'os'
@@ -19,8 +20,21 @@ export const checkSize = (originalFile: string, createdFile: string) => {
   return original.size === created.size
 }
 
-export const getReadStream = (testFile: string) => {
-  return fs.createReadStream(testFile)
+export const getReadStream = async (testFile: string) => {
+  const ready = new Waiter()
+  const stream = fs.createReadStream(testFile)
+  stream.on('open', () => {
+    ready.resolve()
+  })
+
+  stream.on('error', err => {
+    console.error('[getReadStream] Error', err)
+    ready.reject()
+  })
+
+  await ready
+
+  return stream
 }
 
 export { TestFileManager } from './TestFileManager'

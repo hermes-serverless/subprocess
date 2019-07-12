@@ -5,40 +5,40 @@ import { getReadStream, TestFileManager } from './testUtils'
 const TIMEOUT = 30 * 1000
 const MB = 1000
 
+const testFiles = new TestFileManager('pipeUntilLimit-limit')
+
+testFiles.createStreamFile({ baseSizeKB: 1 })
+testFiles.createStreamFile({ baseSizeKB: 10 })
+testFiles.createStreamFile({ baseSizeKB: 100 })
+testFiles.createStreamFile({ baseSizeKB: 1000 })
+testFiles.createStreamFile({ baseSizeKB: 20 * MB })
+testFiles.createStreamFile({ baseSizeKB: 30 * MB })
+testFiles.createStreamFile({ baseSizeKB: 40 * MB })
+testFiles.createStreamFile({ baseSizeKB: 50 * MB })
+testFiles.createStreamFile({ baseSizeKB: 100 * MB })
+testFiles.createStreamFile({ baseSizeKB: 200 * MB })
+testFiles.createStreamFile({ baseSizeKB: 500 * MB, zero: true })
+testFiles.createTextFile({ text: 'ola eu sou o goku', testname: 'goku' })
+testFiles.createTextFile({ text: 'a', repeats: 100, testname: '1e2a' })
+testFiles.createTextFile({ text: 'a', repeats: 1000, testname: '1e3a' })
+testFiles.createTextFile({ text: 'a', repeats: 10000, testname: '1e4a' })
+testFiles.createTextFile({ text: 'a', repeats: 100000, testname: '1e5a' })
+testFiles.createTextFile({ text: 'a', repeats: 1000000, testname: '1e6a' })
+testFiles.createTextFile({ text: 'b', repeats: 1000000, testname: '1e6b' })
+testFiles.createTextFile({ text: 'c', repeats: 1000000, testname: '1e6c' })
+testFiles.createTextFile({ text: 'a', repeats: 10000000, testname: '1e7a' })
+testFiles.createTextFile({ text: 'b', repeats: 10000000, testname: '1e7b' })
+testFiles.createTextFile({ text: 'b', repeats: 100000000, testname: '1e8b' })
+
+beforeAll(async () => {
+  await testFiles.waitForFilesCreation()
+}, TIMEOUT)
+
+afterAll(() => {
+  testFiles.cleanUpTestFiles()
+})
+
 describe('Check if limits for pipeUntilLimit is working properly', () => {
-  const testFiles = new TestFileManager('pipeUntilLimit-limit')
-
-  testFiles.createStreamFile({ baseSizeKB: 1 })
-  testFiles.createStreamFile({ baseSizeKB: 10 })
-  testFiles.createStreamFile({ baseSizeKB: 100 })
-  testFiles.createStreamFile({ baseSizeKB: 1000 })
-  testFiles.createStreamFile({ baseSizeKB: 20 * MB })
-  testFiles.createStreamFile({ baseSizeKB: 30 * MB })
-  testFiles.createStreamFile({ baseSizeKB: 40 * MB })
-  testFiles.createStreamFile({ baseSizeKB: 50 * MB })
-  testFiles.createStreamFile({ baseSizeKB: 100 * MB })
-  testFiles.createStreamFile({ baseSizeKB: 200 * MB })
-  testFiles.createStreamFile({ baseSizeKB: 500 * MB, zero: true })
-  testFiles.createTextFile({ text: 'ola eu sou o goku', testname: 'goku' })
-  testFiles.createTextFile({ text: 'a', repeats: 100, testname: '1e2a' })
-  testFiles.createTextFile({ text: 'a', repeats: 1000, testname: '1e3a' })
-  testFiles.createTextFile({ text: 'a', repeats: 10000, testname: '1e4a' })
-  testFiles.createTextFile({ text: 'a', repeats: 100000, testname: '1e5a' })
-  testFiles.createTextFile({ text: 'a', repeats: 1000000, testname: '1e6a' })
-  testFiles.createTextFile({ text: 'b', repeats: 1000000, testname: '1e6b' })
-  testFiles.createTextFile({ text: 'c', repeats: 1000000, testname: '1e6c' })
-  testFiles.createTextFile({ text: 'a', repeats: 10000000, testname: '1e7a' })
-  testFiles.createTextFile({ text: 'b', repeats: 10000000, testname: '1e7b' })
-  testFiles.createTextFile({ text: 'b', repeats: 100000000, testname: '1e8b' })
-
-  beforeAll(async () => {
-    await testFiles.waitForFilesCreation()
-  }, TIMEOUT)
-
-  afterAll(() => {
-    testFiles.cleanUpTestFiles()
-  })
-
   describe('Tests for limits', () => {
     const setupPipeAndCheckStreamedData = async (
       testFile: string,
@@ -52,8 +52,8 @@ describe('Check if limits for pipeUntilLimit is working properly', () => {
         buffers.push(data)
       })
 
-      const src = getReadStream(testFile)
-      const { file: dest, filepath } = testFiles.getWriteStream()
+      const src = await getReadStream(testFile)
+      const { file: dest, filepath } = await testFiles.getWriteStream()
 
       const srcListeners = [
         src.listenerCount('close'),
@@ -94,7 +94,7 @@ describe('Check if limits for pipeUntilLimit is working properly', () => {
 
       try {
         const allDataBuffer = Buffer.concat(buffers)
-        const resBuffer = await fs.promises.readFile(filepath)
+        const resBuffer = fs.readFileSync(filepath)
         expect(allDataBuffer.length).toBe(expectedBufferSize)
         expect(resBuffer.length).toBe(expectedBufferSize)
         expect(Buffer.compare(resBuffer, allDataBuffer)).toBe(0)

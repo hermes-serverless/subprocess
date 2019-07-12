@@ -47,7 +47,7 @@ export const pipeUntilLimit = (args: PipeUntilLimitArgs) => {
     isDestCleaned = true
     dest.removeListener('drain', onDrain)
     dest.removeListener('error', onError)
-    dest.removeListener('finish', onDestFinish)
+    dest.removeListener('close', onDestFinish)
   }
 
   let closedSrc = false
@@ -107,7 +107,7 @@ export const pipeUntilLimit = (args: PipeUntilLimitArgs) => {
 
   dest.on('drain', onDrain)
   dest.on('error', onError)
-  dest.on('finish', onDestFinish)
+  dest.on('close', onDestFinish)
   src.on('close', closeSrc)
   src.on('error', onError)
   src.on('end', closeSrc)

@@ -1,84 +1,96 @@
-import { QueueBuffer } from '@hermes-project/circular-buffer';
-import execa, { ExecaChildProcess } from 'execa';
-import { Readable, Writable } from 'stream';
-import { MaxOutputSizeReached } from './errors';
-import { pipeUntilLimit } from './pipeUtils';
+import { QueueBuffer } from '@hermes-project/circular-buffer'
+import { flowUntilLimit } from '@hermes-serverless/stream-utils'
+import execa from '@tiagonapoli/execa'
+import { randomBytes } from 'crypto'
+import { Readable, Writable } from 'stream'
+import { MaxOutputSizeReached } from './errors'
 
-export interface SubprocessConstructor {
-  id: string
-  path: string
+export interface SubprocessOptions {
+  id?: string
   args?: string[]
-  maxBufferSize: number
+  maxBufferSize?: number
   maxOutputSize?: number
   logger?: any
 }
 
 export interface SubprocessIO {
-  in?: Readable
-  err?: Writable
-  out?: Writable
+  input?: Readable
+  stderr?: Writable
+  stdout?: Writable
 }
+
+const DEFAULT_BUFFER_SIZE = 10 * 1000
 
 export class Subprocess {
   private logger: any
-
   private maxOutputSize: number
   private maxBufferSize: number
   private limitReached: boolean
 
-  private path: string
-  private args: string[]
-  private process: ExecaChildProcess
   private id: string
+
+  private command: string
+  private args: string[]
+  private proc: execa.ExecaChildProcess<string>
+  private procRes: execa.ExecaReturnValue<string>
 
   private out: QueueBuffer
   private err: QueueBuffer
   private runError?: Error
 
-  constructor({ path, args, id, maxBufferSize, maxOutputSize, logger }: SubprocessConstructor) {
+  constructor(command: string, options?: SubprocessOptions) {
+    const { id, args, logger, maxOutputSize, maxBufferSize } = {
+      id: randomBytes(8).toString('hex'),
+      args: [] as string[],
+      logger: null,
+      maxOutputSize: null,
+      maxBufferSize: DEFAULT_BUFFER_SIZE,
+      ...(options != null ? options : {}),
+    } as SubprocessOptions
+
     this.id = id
-    this.path = path
-    this.args = args ? args : []
+    this.command = command
+    this.args = args
     this.logger = logger
-    this.maxOutputSize = maxOutputSize != null ? maxOutputSize : null
+    this.maxOutputSize = maxOutputSize
     this.maxBufferSize = maxBufferSize
     this.limitReached = false
   }
 
-  public start(io: SubprocessIO) {
+  public run = async (io?: SubprocessIO): Promise<execa.ExecaReturnValue<string>> => {
+    const { input, stderr, stdout } = (io || {}) as SubprocessIO
+
     if (this.logger) {
-      this.logger.info(`[Subprocess] Spawn process: ${this.id}`, {
-        path: this.path,
+      this.logger.info(this.addName(`Spawn process`), {
+        command: this.command,
         args: this.args,
       })
     }
 
     try {
-      this.process = execa(this.path, this.args, {
-        ...(io.in != null ? { input: io.in } : {}),
+      this.proc = execa(this.command, this.args, {
+        ...(input != null ? { input } : {}),
+        buffer: false,
       })
 
-      this.err = this.setupOutputBuffer(io.err, this.process.stderr)
-      this.out = this.setupOutputBuffer(io.out, this.process.stdout)
+      this.err = this.setupOutputBuffer(this.proc.stderr, stderr)
+      this.out = this.setupOutputBuffer(this.proc.stdout, stdout)
+      this.proc.all.resume()
+      this.procRes = await this.proc
+      return this.procRes
     } catch (err) {
-      if (this.logger) {
-        this.logger.error(`[Subprocess] Error catch ${this.id}`, err)
-      }
+      if (this.logger) this.logger.error(this.addName(`Error on run function`), err)
+      if (!this.runError) this.runError = err
+      throw err
     }
   }
 
-  public finish = async () => {
-    try {
-      await this.process
-    } catch(err) {
-      if(this.logger) {
-        this.logger.error(`[Subpro]`)
-      }
-    }
+  public processResults = (): execa.ExecaReturnValue<string> => {
+    return this.procRes
   }
 
   public kill = () => {
-    this.process.kill()
+    return this.proc.kill()
   }
 
   public getErr = (): string => {
@@ -89,7 +101,15 @@ export class Subprocess {
     return this.out.getString()
   }
 
-  private setupOutputBuffer = (outputStream: Writable, stdStream: Readable) => {
+  public checkError = () => {
+    return this.runError
+  }
+
+  public getLimitReached = () => {
+    return this.limitReached
+  }
+
+  private setupOutputBuffer = (stdStream: Readable, outputStream?: Writable) => {
     const onLimit = () => {
       if (this.limitReached) {
         if (outputStream) stdStream.unpipe(outputStream)
@@ -97,26 +117,27 @@ export class Subprocess {
       }
 
       this.limitReached = true
-      if (this.runError == null) {
-        this.runError = new MaxOutputSizeReached(this.maxOutputSize)
-        this.process.emit('error', this.runError)
-      }
-
+      if (this.runError == null) this.runError = new MaxOutputSizeReached(this.maxOutputSize)
       this.kill()
     }
 
     const queueBuffer = new QueueBuffer(this.maxBufferSize)
 
-    const onData = (data: string) => {
-      queueBuffer.push(data)
+    const onData = (data: Buffer | string) => {
+      if (Buffer.isBuffer(data)) {
+        queueBuffer.push(data.toString())
+      } else queueBuffer.push(data)
     }
 
-    pipeUntilLimit({
+    flowUntilLimit(stdStream, {
       onLimit,
       onData,
-      src: stdStream,
-      dest: outputStream,
       limit: this.maxOutputSize,
+      ...(outputStream != null ? { dest: outputStream } : {}),
+    }).catch(err => {
+      if (this.logger) {
+        this.logger.error(this.addName(`FlowUntilLimit error`), err)
+      }
     })
 
     return queueBuffer

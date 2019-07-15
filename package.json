@@ -1,5 +1,5 @@
 {
-  "name": "@hermes-project/subprocess",
+  "name": "@hermes-serverless/subprocess",
   "version": "0.0.1",
   "description": "",
   "main": "build/index.js",
@@ -20,29 +20,27 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/hermes-tcc/subprocess"
+    "url": "git+https://github.com/hermes-serverless/subprocess"
   },
   "author": "Tiago Nápoli <napoli.tiago96@gmail.com>",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/hermes-tcc/subprocess/issues"
+    "url": "https://github.com/hermes-serverless/subprocess/issues"
   },
-  "homepage": "https://github.com/hermes-tcc/subprocess#readme",
+  "homepage": "https://github.com/hermes-serverless/subprocess#readme",
   "dependencies": {
     "@hermes-project/circular-buffer": "^0.0.1",
-    "@hermes-project/custom-promises": "^0.0.1",
-    "@types/execa": "^0.9.0",
-    "execa": "^2.0.3"
+    "@hermes-serverless/stream-utils": "^0.0.3",
+    "@tiagonapoli/execa": "^2.0.4",
+    "@types/execa": "^0.9.0"
   },
   "devDependencies": {
     "@types/jest": "^24.0.11",
-    "@types/md5-file": "^4.0.0",
+    "@types/memorystream": "^0.3.0",
     "@types/node": "^12.6.1",
-    "@types/rimraf": "^2.0.2",
     "jest": "^24.7.1",
-    "md5-file": "^4.0.0",
+    "memorystream": "^0.3.1",
     "prettier": "^1.17.0",
-    "rimraf": "^2.6.3",
     "ts-jest": "^24.0.2",
     "ts-node": "^8.1.0",
     "tslint": "^5.16.0",

@@ -111,11 +111,7 @@ export class Subprocess {
 
   private setupOutputBuffer = (stdStream: Readable, outputStream?: Writable) => {
     const onLimit = () => {
-      if (this.limitReached) {
-        if (outputStream) stdStream.unpipe(outputStream)
-        return
-      }
-
+      if (this.limitReached) return
       this.limitReached = true
       if (this.runError == null) this.runError = new MaxOutputSizeReached(this.maxOutputSize)
       this.kill()

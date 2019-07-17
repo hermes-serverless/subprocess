@@ -1,7 +1,7 @@
-import { QueueBuffer } from '@hermes-project/circular-buffer'
+import { QueueBuffer } from '@hermes-serverless/circular-buffer'
 import { flowUntilLimit } from '@hermes-serverless/stream-utils'
-import execa from '@tiagonapoli/execa'
 import { randomBytes } from 'crypto'
+import execa, { ExecaChildProcess, ExecaReturnValue } from 'execa'
 import { Readable, Writable } from 'stream'
 import { MaxOutputSizeReached } from './errors'
 
@@ -17,6 +17,19 @@ export interface SubprocessIO {
   input?: Readable
   stderr?: Writable
   stdout?: Writable
+  all?: Writable
+}
+
+export interface ProcessResult {
+  command: string
+  exitCode: number
+  exitCodeName: string
+  failed: boolean
+  timedOut: boolean
+  killed: boolean
+  isCanceled: boolean
+  signal?: string
+  error?: Error
 }
 
 const DEFAULT_BUFFER_SIZE = 10 * 1000
@@ -31,12 +44,11 @@ export class Subprocess {
 
   private command: string
   private args: string[]
-  private proc: execa.ExecaChildProcess<string>
-  private procRes: execa.ExecaReturnValue<string>
+  private proc: ExecaChildProcess<string>
+  private procRes: ProcessResult
 
   private out: QueueBuffer
   private err: QueueBuffer
-  private runError?: Error
 
   constructor(command: string, options?: SubprocessOptions) {
     const { id, args, logger, maxOutputSize, maxBufferSize } = {
@@ -57,8 +69,8 @@ export class Subprocess {
     this.limitReached = false
   }
 
-  public run = async (io?: SubprocessIO): Promise<execa.ExecaReturnValue<string>> => {
-    const { input, stderr, stdout } = (io || {}) as SubprocessIO
+  public run = async (io?: SubprocessIO): Promise<ProcessResult> => {
+    const { input, stderr, stdout, all } = (io || {}) as SubprocessIO
 
     if (this.logger) {
       this.logger.info(this.addName(`Spawn process`), {
@@ -75,45 +87,55 @@ export class Subprocess {
 
       this.err = this.setupOutputBuffer(this.proc.stderr, stderr)
       this.out = this.setupOutputBuffer(this.proc.stdout, stdout)
-      this.proc.all.resume()
-      this.procRes = await this.proc
-      return this.procRes
+      if (all) {
+        this.proc.all.pipe(all)
+      } else this.proc.all.resume()
+      this.procRes = this.createProcResult(await this.proc)
     } catch (err) {
       if (this.logger) this.logger.error(this.addName(`Error on run function`), err)
-      if (!this.runError) this.runError = err
-      throw err
+      this.procRes = this.createProcResult(
+        err,
+        this.limitReached ? new MaxOutputSizeReached(this.maxOutputSize) : new Error(err.message)
+      )
+      throw this.procRes.error
     }
+
+    if (this.limitReached) {
+      this.procRes.error = new MaxOutputSizeReached(this.maxOutputSize)
+      throw this.procRes.error
+    }
+
+    return this.procRes
   }
 
-  public processResults = (): execa.ExecaReturnValue<string> => {
+  get stderrBuffer(): string {
+    return this.err.getString()
+  }
+
+  get stdoutBuffer(): string {
+    return this.out.getString()
+  }
+
+  get hasReachedLimit(): boolean {
+    return this.limitReached
+  }
+
+  get processResult(): ProcessResult {
     return this.procRes
+  }
+
+  public checkError = () => {
+    return this.procRes.error
   }
 
   public kill = () => {
     return this.proc.kill()
   }
 
-  public getErr = (): string => {
-    return this.err.getString()
-  }
-
-  public getOut = () => {
-    return this.out.getString()
-  }
-
-  public checkError = () => {
-    return this.runError
-  }
-
-  public getLimitReached = () => {
-    return this.limitReached
-  }
-
   private setupOutputBuffer = (stdStream: Readable, outputStream?: Writable) => {
     const onLimit = () => {
       if (this.limitReached) return
       this.limitReached = true
-      if (this.runError == null) this.runError = new MaxOutputSizeReached(this.maxOutputSize)
       this.kill()
     }
 
@@ -137,6 +159,32 @@ export class Subprocess {
     })
 
     return queueBuffer
+  }
+
+  private createProcResult = (
+    {
+      command,
+      exitCode,
+      exitCodeName,
+      failed,
+      timedOut,
+      killed,
+      isCanceled,
+      signal,
+    }: ExecaReturnValue,
+    error?: Error
+  ) => {
+    return {
+      command,
+      exitCode,
+      exitCodeName,
+      failed,
+      timedOut,
+      killed,
+      isCanceled,
+      signal,
+      error,
+    }
   }
 
   private addName = (msg: string) => {

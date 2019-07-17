@@ -1,0 +1,7 @@
+#!/usr/bin/env node
+'use strict'
+const output = process.argv[2] || 'stdout'
+const bytes = Number(process.argv[3] || 1e7)
+
+if (output === 'stdout') console.log('.'.repeat(bytes))
+else console.error('.'.repeat(bytes))

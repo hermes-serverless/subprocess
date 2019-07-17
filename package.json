@@ -1,6 +1,6 @@
 {
   "name": "@hermes-serverless/subprocess",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "",
   "main": "build/index.js",
   "types": "build/index.d.ts",
@@ -29,17 +29,15 @@
   },
   "homepage": "https://github.com/hermes-serverless/subprocess#readme",
   "dependencies": {
-    "@hermes-project/circular-buffer": "^0.0.1",
-    "@hermes-serverless/stream-utils": "^0.0.3",
-    "@tiagonapoli/execa": "^2.0.4",
-    "@types/execa": "^0.9.0"
+    "@hermes-serverless/circular-buffer": "^0.1.0",
+    "@hermes-serverless/stream-utils": "^0.0.4",
+    "execa": "^2.0.3"
   },
   "devDependencies": {
     "@types/jest": "^24.0.11",
-    "@types/memorystream": "^0.3.0",
     "@types/node": "^12.6.1",
+    "get-stream": "^5.1.0",
     "jest": "^24.7.1",
-    "memorystream": "^0.3.1",
     "prettier": "^1.17.0",
     "ts-jest": "^24.0.2",
     "ts-node": "^8.1.0",

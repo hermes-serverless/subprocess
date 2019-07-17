@@ -1,0 +1,5 @@
+#!/usr/bin/env node
+'use strict';
+
+const output = process.argv[2] || 'stdout';
+process.stdin.pipe(process[output])

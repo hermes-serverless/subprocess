@@ -1,0 +1,13 @@
+#!/usr/bin/env node
+'use strict'
+const commonBytes = Number(process.argv[2])
+const additionalStdoutBytes = Number(process.argv[3] || 0)
+const additionalStderrBytes = Number(process.argv[4] || 0)
+
+process['stdout'].write('.'.repeat(commonBytes))
+process['stderr'].write('+'.repeat(commonBytes))
+
+process['stderr'].write('+'.repeat(additionalStderrBytes))
+process['stdout'].write('.'.repeat(additionalStdoutBytes))
+
+setTimeout(() => {}, 100 * 1000)

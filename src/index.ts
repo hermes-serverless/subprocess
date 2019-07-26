@@ -2,6 +2,7 @@ import { QueueBuffer } from '@hermes-serverless/circular-buffer'
 import { flowUntilLimit } from '@hermes-serverless/stream-utils'
 import { randomBytes } from 'crypto'
 import execa, { ExecaChildProcess, ExecaReturnValue } from 'execa'
+import makeArray from 'make-array'
 import { Readable, Writable } from 'stream'
 import { MaxOutputSizeReached } from './errors'
 
@@ -15,9 +16,9 @@ export interface SubprocessOptions {
 
 export interface SubprocessIO {
   input?: Readable
-  stderr?: Writable
-  stdout?: Writable
-  all?: Writable
+  stderr?: Writable | Writable[]
+  stdout?: Writable | Writable[]
+  all?: Writable | Writable[]
 }
 
 export interface ProcessResult {
@@ -71,6 +72,9 @@ export class Subprocess {
 
   public run = async (io?: SubprocessIO): Promise<ProcessResult> => {
     const { input, stderr, stdout, all } = (io || {}) as SubprocessIO
+    const stderrArr: Writable[] = makeArray(stderr)
+    const stdoutArr: Writable[] = makeArray(stdout)
+    const allArr: Writable[] = makeArray(all)
 
     if (this.logger) {
       this.logger.info(this.addName(`Spawn process`), {
@@ -85,15 +89,15 @@ export class Subprocess {
         buffer: false,
       })
 
-      this.err = this.setupOutputBuffer(this.proc.stderr, stderr)
-      this.out = this.setupOutputBuffer(this.proc.stdout, stdout)
-      if (all) {
-        this.proc.all.pipe(all)
+      this.err = this._setupOutputBuffer(this.proc.stderr, stderrArr)
+      this.out = this._setupOutputBuffer(this.proc.stdout, stdoutArr)
+      if (allArr.length > 0) {
+        allArr.forEach(el => this.proc.all.pipe(el))
       } else this.proc.all.resume()
-      this.procRes = this.createProcResult(await this.proc)
+      this.procRes = this._createProcResult(await this.proc)
     } catch (err) {
       if (this.logger) this.logger.error(this.addName(`Error on run function`), err)
-      this.procRes = this.createProcResult(
+      this.procRes = this._createProcResult(
         err,
         this.limitReached ? new MaxOutputSizeReached(this.maxOutputSize) : new Error(err.message)
       )
@@ -132,7 +136,7 @@ export class Subprocess {
     return this.proc.kill()
   }
 
-  private setupOutputBuffer = (stdStream: Readable, outputStream?: Writable) => {
+  public _setupOutputBuffer = (stdStream: Readable, outputStream: Writable[]) => {
     const onLimit = () => {
       if (this.limitReached) return
       this.limitReached = true
@@ -151,7 +155,7 @@ export class Subprocess {
       onLimit,
       onData,
       limit: this.maxOutputSize,
-      ...(outputStream != null ? { dest: outputStream } : {}),
+      dest: outputStream,
     }).catch(err => {
       if (this.logger) {
         this.logger.error(this.addName(`FlowUntilLimit error`), err)
@@ -161,7 +165,7 @@ export class Subprocess {
     return queueBuffer
   }
 
-  private createProcResult = (
+  public _createProcResult = (
     {
       command,
       exitCode,

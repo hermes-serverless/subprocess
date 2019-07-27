@@ -6,45 +6,42 @@ process.env.PATH = path.join(__dirname, 'fixtures') + path.delimiter + process.e
 const KB = 1000
 const MB = 1000 * KB
 
+const checkBuffers = (p: any, { stdout = '', stderr = '' }) => {
+  expect(p.stdoutBuffer).toBe(stdout)
+  expect(p.stderrBuffer).toBe(stderr)
+}
+
 describe('Buffer should work on success', () => {
   test('stdin -> stdout', async () => {
     const p = new Subprocess('stdin', { args: ['stdout'] })
     const input = new PassThrough()
-    input.write('skrattar du förlorar du')
-    input.end()
+    input.end('skrattar du förlorar du')
     await p.run({ input })
-    expect(p.stdoutBuffer).toBe('skrattar du förlorar du')
-    expect(p.stderrBuffer).toBe('')
+    checkBuffers(p, { stdout: 'skrattar du förlorar du' })
   })
 
   test('stdin -> stderr', async () => {
     const p = new Subprocess('stdin', { args: ['stderr'] })
     const input = new PassThrough()
-    input.write('skrattar du förlorar du')
-    input.end()
+    input.end('skrattar du förlorar du')
     await p.run({ input })
-    expect(p.stdoutBuffer).toBe('')
-    expect(p.stderrBuffer).toBe('skrattar du förlorar du')
+    checkBuffers(p, { stderr: 'skrattar du förlorar du' })
   })
 
   test('stdin -> stdout with other stdio streams', async () => {
     const p = new Subprocess('stdin', { args: ['stdout'] })
     const input = new PassThrough()
-    input.write('skrattar du förlorar du')
-    input.end()
+    input.end('skrattar du förlorar du')
     await p.run({ input, stdout: new PassThrough(), stderr: new PassThrough() })
-    expect(p.stdoutBuffer).toBe('skrattar du förlorar du')
-    expect(p.stderrBuffer).toBe('')
+    checkBuffers(p, { stdout: 'skrattar du förlorar du' })
   })
 
   test('stdin -> stderr with other stdio streams', async () => {
     const p = new Subprocess('stdin', { args: ['stderr'] })
     const input = new PassThrough()
-    input.write('skrattar du förlorar du')
-    input.end()
+    input.end('skrattar du förlorar du')
     await p.run({ input, stdout: new PassThrough(), stderr: new PassThrough() })
-    expect(p.stdoutBuffer).toBe('')
-    expect(p.stderrBuffer).toBe('skrattar du förlorar du')
+    checkBuffers(p, { stderr: 'skrattar du förlorar du' })
   })
 
   test('stdin -> stdout with stderr stream', async () => {
@@ -53,8 +50,7 @@ describe('Buffer should work on success', () => {
     input.write('skrattar du förlorar du')
     input.end()
     await p.run({ input, stderr: new PassThrough() })
-    expect(p.stdoutBuffer).toBe('skrattar du förlorar du')
-    expect(p.stderrBuffer).toBe('')
+    checkBuffers(p, { stdout: 'skrattar du förlorar du' })
   })
 
   test('stdin -> stderr with stderr streams', async () => {
@@ -63,8 +59,7 @@ describe('Buffer should work on success', () => {
     input.write('skrattar du förlorar du')
     input.end()
     await p.run({ input, stderr: new PassThrough() })
-    expect(p.stdoutBuffer).toBe('')
-    expect(p.stderrBuffer).toBe('skrattar du förlorar du')
+    checkBuffers(p, { stderr: 'skrattar du förlorar du' })
   })
 
   test('stdin -> stdout with stderr stream', async () => {
@@ -83,8 +78,7 @@ describe('Buffer should work on success', () => {
     input.write('skrattar du förlorar du')
     input.end()
     await p.run({ input, stdout: new PassThrough() })
-    expect(p.stdoutBuffer).toBe('')
-    expect(p.stderrBuffer).toBe('skrattar du förlorar du')
+    checkBuffers(p, { stderr: 'skrattar du förlorar du' })
   })
 
   test('stdin -> stderr', async () => {
@@ -93,74 +87,65 @@ describe('Buffer should work on success', () => {
     input.write('skrattar du förlorar du')
     input.end()
     await p.run({ input })
-    expect(p.stdoutBuffer).toBe('')
-    expect(p.stderrBuffer).toBe('skrattar du förlorar du')
+    checkBuffers(p, { stderr: 'skrattar du förlorar du' })
   })
 
   test('5kb -> stdout', async () => {
     const p = new Subprocess('max-buffer', { args: ['stdout', '5000'] })
     await p.run()
-    expect(p.stdoutBuffer).toBe('.'.repeat(5000) + '\n')
-    expect(p.stderrBuffer).toBe('')
+    checkBuffers(p, { stdout: '.'.repeat(5000) + '\n' })
   })
 
   test('5kb -> stderr', async () => {
     const p = new Subprocess('max-buffer', { args: ['stderr', '5000'] })
     await p.run()
-    expect(p.stdoutBuffer).toBe('')
-    expect(p.stderrBuffer).toBe('.'.repeat(5000) + '\n')
+    checkBuffers(p, { stderr: '.'.repeat(5000) + '\n' })
   })
 
   test('echo-script', async () => {
     const p = new Subprocess('echo-script', { args: ['oi', 'eu', 'sou', 'o', 'goku'] })
     await p.run()
-    expect(p.stdoutBuffer).toBe(['oi', 'eu', 'sou', 'o', 'goku'].join('\n') + '\n')
-    expect(p.stderrBuffer).toBe('')
+    checkBuffers(p, { stdout: ['oi', 'eu', 'sou', 'o', 'goku'].join('\n') + '\n' })
   })
 
   test('echo', async () => {
     const p = new Subprocess('echo', { args: ['oi'] })
     await p.run()
-    expect(p.stdoutBuffer).toBe('oi\n')
-    expect(p.stderrBuffer).toBe('')
+    checkBuffers(p, { stdout: 'oi\n' })
   })
 
   test('hello.sh', async () => {
     const p = new Subprocess('hello.sh')
     await p.run()
-    expect(p.stdoutBuffer).toBe('Hello World\n')
-    expect(p.stderrBuffer).toBe('')
+    checkBuffers(p, { stdout: 'Hello World\n' })
   })
 
   test('command with space', async () => {
     const p = new Subprocess('command with space', { args: ['ich', 'bin', 'du'] })
     await p.run()
-    expect(p.stdoutBuffer).toBe(['ich', 'bin', 'du'].join('\n') + '\n')
-    expect(p.stderrBuffer).toBe('')
+    checkBuffers(p, { stdout: ['ich', 'bin', 'du'].join('\n') + '\n' })
   })
 })
 
 describe('Buffer limit should work', () => {
-  test('500mb -> stdout', async () => {
+  test('250mb -> stdout', async () => {
     const p = new Subprocess('max-buffer', {
-      args: ['stdout', `${500 * MB}`],
+      args: ['stdout', `${250 * MB}`],
       maxBufferSize: 256 * KB,
     })
 
     await p.run()
-    expect(p.stdoutBuffer).toBe('.'.repeat(256 * KB - 1) + '\n')
-    expect(p.stderrBuffer).toBe('')
+    checkBuffers(p, { stdout: '.'.repeat(256 * KB - 1) + '\n' })
   }, 10000)
 
-  test('500mb -> stderr', async () => {
+  test('250mb -> stderr', async () => {
     const p = new Subprocess('max-buffer', {
-      args: ['stderr', `${500 * MB}`],
+      args: ['stderr', `${250 * MB}`],
       maxBufferSize: 256 * KB,
     })
 
     await p.run()
-    expect(p.stdoutBuffer).toBe('')
-    expect(p.stderrBuffer).toBe('.'.repeat(256 * KB - 1) + '\n')
+    checkBuffers(p, { stderr: '.'.repeat(256 * KB - 1) + '\n' })
   }, 10000)
 })
 
@@ -172,8 +157,7 @@ describe('Buffer should work on manual kill', () => {
       setTimeout(p.kill, 1000)
       await p.run()
     } catch (err) {
-      expect(p.stdoutBuffer).toBe('14 characters\n15 RECEIVED\n')
-      expect(p.stderrBuffer).toBe('')
+      checkBuffers(p, { stdout: '14 characters\n15 RECEIVED\n' })
     }
   })
 
@@ -181,8 +165,7 @@ describe('Buffer should work on manual kill', () => {
     const p = new Subprocess('sigterm-catcher-exit-success.py')
     setTimeout(p.kill, 1000)
     await p.run()
-    expect(p.stdoutBuffer).toBe('14 characters\n15 RECEIVED\n')
-    expect(p.stderrBuffer).toBe('')
+    checkBuffers(p, { stdout: '14 characters\n15 RECEIVED\n' })
   })
 
   test('sleeper.py', async () => {
@@ -192,8 +175,7 @@ describe('Buffer should work on manual kill', () => {
       setTimeout(p.kill, 1000)
       await p.run()
     } catch (err) {
-      expect(p.stdoutBuffer).toBe('14 characters\n')
-      expect(p.stderrBuffer).toBe('')
+      checkBuffers(p, { stdout: '14 characters\n' })
     }
   })
 
@@ -204,8 +186,7 @@ describe('Buffer should work on manual kill', () => {
       setTimeout(p.kill, 1000)
       await p.run()
     } catch (err) {
-      expect(p.stdoutBuffer).toBe('.'.repeat(100))
-      expect(p.stderrBuffer).toBe('+'.repeat(100))
+      checkBuffers(p, { stdout: '.'.repeat(100), stderr: '+'.repeat(100) })
     }
   })
 })
@@ -217,8 +198,7 @@ describe('Buffer should work on limit', () => {
     try {
       await p.run()
     } catch (err) {
-      expect(p.stdoutBuffer).toBe('.'.repeat(10))
-      expect(p.stderrBuffer).toBe('+'.repeat(9))
+      checkBuffers(p, { stdout: '.'.repeat(10), stderr: '+'.repeat(9) })
     }
   })
 
@@ -228,8 +208,7 @@ describe('Buffer should work on limit', () => {
     try {
       await p.run()
     } catch (err) {
-      expect(p.stdoutBuffer).toBe('.'.repeat(9))
-      expect(p.stderrBuffer).toBe('+'.repeat(10))
+      checkBuffers(p, { stdout: '.'.repeat(9), stderr: '+'.repeat(10) })
     }
   })
 
@@ -239,8 +218,7 @@ describe('Buffer should work on limit', () => {
     try {
       await p.run()
     } catch (err) {
-      expect(p.stdoutBuffer).toBe('.'.repeat(10))
-      expect(p.stderrBuffer).toBe('+'.repeat(10))
+      checkBuffers(p, { stdout: '.'.repeat(10), stderr: '+'.repeat(10) })
     }
   })
 
@@ -250,8 +228,7 @@ describe('Buffer should work on limit', () => {
     try {
       await p.run()
     } catch (err) {
-      expect(p.stdoutBuffer).toBe('.'.repeat(10))
-      expect(p.stderrBuffer).toBe('')
+      checkBuffers(p, { stdout: '.'.repeat(10) })
     }
   })
 
@@ -261,8 +238,7 @@ describe('Buffer should work on limit', () => {
     try {
       await p.run()
     } catch (err) {
-      expect(p.stdoutBuffer).toBe('14 characters')
-      expect(p.stderrBuffer).toBe('')
+      checkBuffers(p, { stdout: '14 characters' })
     }
   })
 
@@ -272,8 +248,7 @@ describe('Buffer should work on limit', () => {
     try {
       await p.run()
     } catch (err) {
-      expect(p.stdoutBuffer).toBe('14 characters')
-      expect(p.stderrBuffer).toBe('')
+      checkBuffers(p, { stdout: '14 characters' })
     }
   })
 
@@ -283,8 +258,7 @@ describe('Buffer should work on limit', () => {
     try {
       await p.run()
     } catch (err) {
-      expect(p.stdoutBuffer).toBe('14 characters')
-      expect(p.stderrBuffer).toBe('')
+      checkBuffers(p, { stdout: '14 characters' })
     }
   })
 })

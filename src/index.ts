@@ -89,11 +89,21 @@ export class Subprocess {
         buffer: false,
       })
 
-      this.err = this._setupOutputBuffer(this.proc.stderr, stderrArr)
-      this.out = this._setupOutputBuffer(this.proc.stdout, stdoutArr)
+      const onLimit = () => {
+        if (this.limitReached) return
+        this.limitReached = true
+        this.proc.all.unpipe()
+        this.proc.all.resume()
+        allArr.forEach(el => el.end())
+        this.kill()
+      }
+
+      this.err = this._setupOutputBuffer(this.proc.stderr, stderrArr, onLimit)
+      this.out = this._setupOutputBuffer(this.proc.stdout, stdoutArr, onLimit)
       if (allArr.length > 0) {
         allArr.forEach(el => this.proc.all.pipe(el))
       } else this.proc.all.resume()
+
       this.procRes = this._createProcResult(await this.proc)
     } catch (err) {
       if (this.logger) this.logger.error(this.addName(`Error on run function`), err)
@@ -136,13 +146,11 @@ export class Subprocess {
     return this.proc.kill()
   }
 
-  public _setupOutputBuffer = (stdStream: Readable, outputStream: Writable[]) => {
-    const onLimit = () => {
-      if (this.limitReached) return
-      this.limitReached = true
-      this.kill()
-    }
-
+  public _setupOutputBuffer = (
+    stdStream: Readable,
+    outputStream: Writable[],
+    onLimit: () => void
+  ) => {
     const queueBuffer = new QueueBuffer(this.maxBufferSize)
 
     const onData = (data: Buffer | string) => {

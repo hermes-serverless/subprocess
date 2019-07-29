@@ -1,6 +1,6 @@
 {
   "name": "@hermes-serverless/subprocess",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "",
   "main": "build/index.js",
   "types": "build/index.d.ts",
@@ -30,15 +30,16 @@
   "homepage": "https://github.com/hermes-serverless/subprocess#readme",
   "dependencies": {
     "@hermes-serverless/circular-buffer": "^0.1.0",
-    "@hermes-serverless/stream-utils": "^0.3.0",
-    "execa": "^2.0.3",
-    "make-array": "^1.0.5"
+    "@hermes-serverless/stream-utils": "^0.3.2",
+    "execa": "^2.0.3"
   },
   "devDependencies": {
+    "@hermes-serverless/custom-promises": "^0.1.0",
     "@types/jest": "^24.0.11",
     "@types/node": "^12.6.1",
     "get-stream": "^5.1.0",
     "jest": "^24.7.1",
+    "make-array": "^1.0.5",
     "prettier": "^1.17.0",
     "ts-jest": "^24.0.2",
     "ts-node": "^8.1.0",

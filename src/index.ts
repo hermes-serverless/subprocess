@@ -1,8 +1,11 @@
 import { QueueBuffer } from '@hermes-serverless/circular-buffer'
-import { flowUntilLimit } from '@hermes-serverless/stream-utils'
+import {
+  flowUntilLimit,
+  normalizeToWritableWithEnd,
+  WritableWithEnd,
+} from '@hermes-serverless/stream-utils'
 import { randomBytes } from 'crypto'
 import execa, { ExecaChildProcess, ExecaReturnValue } from 'execa'
-import makeArray from 'make-array'
 import { Readable, Writable } from 'stream'
 import { MaxOutputSizeReached } from './errors'
 
@@ -16,9 +19,9 @@ export interface SubprocessOptions {
 
 export interface SubprocessIO {
   input?: Readable
-  stderr?: Writable | Writable[]
-  stdout?: Writable | Writable[]
-  all?: Writable | Writable[]
+  stderr?: Writable | WritableWithEnd | (Writable | WritableWithEnd)[]
+  stdout?: Writable | WritableWithEnd | (Writable | WritableWithEnd)[]
+  all?: Writable | WritableWithEnd | (Writable | WritableWithEnd)[]
 }
 
 export interface ProcessResult {
@@ -72,9 +75,9 @@ export class Subprocess {
 
   public run = async (io?: SubprocessIO): Promise<ProcessResult> => {
     const { input, stderr, stdout, all } = (io || {}) as SubprocessIO
-    const stderrArr: Writable[] = makeArray(stderr)
-    const stdoutArr: Writable[] = makeArray(stdout)
-    const allArr: Writable[] = makeArray(all)
+    const stderrArr = normalizeToWritableWithEnd(stderr)
+    const stdoutArr = normalizeToWritableWithEnd(stdout)
+    const allArr = normalizeToWritableWithEnd(all)
 
     if (this.logger) {
       this.logger.info(this.addName(`Spawn process`), {
@@ -93,15 +96,23 @@ export class Subprocess {
         if (this.limitReached) return
         this.limitReached = true
         this.proc.all.unpipe()
-        this.proc.all.resume()
-        allArr.forEach(el => el.end())
+        this.proc.all.on('readable', this.proc.all.read.bind(this.proc.all))
+        allArr.forEach(el => {
+          if (el.end) el.stream.end()
+        })
+
         this.kill()
       }
 
       this.err = this._setupOutputBuffer(this.proc.stderr, stderrArr, onLimit)
       this.out = this._setupOutputBuffer(this.proc.stdout, stdoutArr, onLimit)
       if (allArr.length > 0) {
-        allArr.forEach(el => this.proc.all.pipe(el))
+        allArr.forEach(el => {
+          this.proc.all.pipe(
+            el.stream,
+            { end: el.end }
+          )
+        })
       } else this.proc.all.resume()
 
       this.procRes = this._createProcResult(await this.proc)
@@ -138,6 +149,10 @@ export class Subprocess {
     return this.procRes
   }
 
+  get processDone(): ExecaChildProcess<string> {
+    return this.proc
+  }
+
   public checkError = () => {
     return this.procRes.error
   }
@@ -148,7 +163,7 @@ export class Subprocess {
 
   public _setupOutputBuffer = (
     stdStream: Readable,
-    outputStream: Writable[],
+    outputStream: WritableWithEnd[],
     onLimit: () => void
   ) => {
     const queueBuffer = new QueueBuffer(this.maxBufferSize)

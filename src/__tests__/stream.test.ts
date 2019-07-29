@@ -1,33 +1,12 @@
-import getStream from 'get-stream'
 import path from 'path'
 import { PassThrough } from 'stream'
 import { Subprocess } from '..'
+import { checkStreamEnd, go } from './utils'
 
 process.env.PATH = path.join(__dirname, 'fixtures') + path.delimiter + process.env.PATH
 
 const KB = 1000
 const MB = 1000 * KB
-
-const go = async (p: Subprocess, { input, stdout, stderr, all }: any, expectErr?: boolean) => {
-  const stdoutPromise = stdout != null ? getStream(stdout) : Promise.resolve('')
-  const stderrPromise = stderr != null ? getStream(stderr) : Promise.resolve('')
-  const allPromise = all != null ? getStream(all) : Promise.resolve('')
-  try {
-    await p.run({
-      input,
-      stdout,
-      stderr,
-      all,
-    })
-  } catch (err) {
-    if (!expectErr) throw err
-  }
-  return {
-    stdoutStr: await stdoutPromise,
-    stderrStr: await stderrPromise,
-    allStr: await allPromise,
-  }
-}
 
 describe('Stdio and Stderr should work on general cases', () => {
   test('hello', async () => {
@@ -154,6 +133,184 @@ describe('Streams work on non-zero code return', () => {
   })
 })
 
+describe('Stream with end disabled work when limit is not reached', () => {
+  test('No output - streams end are all false', async () => {
+    const p = new Subprocess('mixed-output', { args: ['0', '0', '0'] })
+    const stdout = { stream: new PassThrough(), end: false }
+    const stderr = { stream: new PassThrough(), end: false }
+    const all = { stream: new PassThrough(), end: false }
+    const promise = go(p, { stdout, stderr, all }, true)
+    const checks = Promise.all([
+      checkStreamEnd(p, stdout, async () => (await promise).stdoutStr, ''),
+      checkStreamEnd(p, stderr, async () => (await promise).stderrStr, ''),
+      checkStreamEnd(p, all, async () => (await promise).allStr),
+    ])
+
+    const endings = await checks
+    const { allStr } = await promise
+    expect(p.hasReachedLimit).toBe(false)
+    expect(allStr.length).toBeGreaterThanOrEqual(endings[2].length)
+  })
+
+  test('5mb -> stdout - stdout end is false', async () => {
+    const size = 5 * 1000 * 1000
+    const p = new Subprocess('max-buffer', { args: ['stdout', `${size}`] })
+    const stdout = { stream: new PassThrough(), end: false }
+    const stderr = new PassThrough()
+    const all = new PassThrough()
+    const promise = go(p, { stdout, stderr, all }, true)
+    const txt = '.'.repeat(size) + '\n'
+    const checks = Promise.all([
+      checkStreamEnd(p, stdout, async () => (await promise).stdoutStr, txt),
+      checkStreamEnd(p, stderr, async () => (await promise).stderrStr, ''),
+      checkStreamEnd(p, all, async () => (await promise).allStr),
+    ])
+
+    const endings = await checks
+    const { allStr } = await promise
+    expect(p.hasReachedLimit).toBe(false)
+    expect(allStr.length).toBeGreaterThanOrEqual(txt.length + endings[2].length)
+  })
+
+  test('5mb -> stdout - stderr end is false', async () => {
+    const size = 5 * 1000 * 1000
+    const p = new Subprocess('max-buffer', { args: ['stdout', `${size}`] })
+    const stdout = new PassThrough()
+    const stderr = { stream: new PassThrough(), end: false }
+    const all = new PassThrough()
+    const promise = go(p, { stdout, stderr, all }, true)
+    const txt = '.'.repeat(size) + '\n'
+    const checks = Promise.all([
+      checkStreamEnd(p, stdout, async () => (await promise).stdoutStr, txt),
+      checkStreamEnd(p, stderr, async () => (await promise).stderrStr, ''),
+      checkStreamEnd(p, all, async () => (await promise).allStr),
+    ])
+
+    const endings = await checks
+    const { allStr } = await promise
+    expect(p.hasReachedLimit).toBe(false)
+    expect(allStr.length).toBeGreaterThanOrEqual(txt.length + endings[2].length)
+  })
+
+  test('5mb -> stderr - stderr end is false', async () => {
+    const size = 5 * 1000 * 1000
+    const p = new Subprocess('max-buffer', { args: ['stderr', `${size}`] })
+    const stdout = new PassThrough()
+    const stderr = { stream: new PassThrough(), end: false }
+    const all = new PassThrough()
+    const promise = go(p, { stdout, stderr, all }, true)
+    const txt = '.'.repeat(size) + '\n'
+    const checks = Promise.all([
+      checkStreamEnd(p, stdout, async () => (await promise).stdoutStr, ''),
+      checkStreamEnd(p, stderr, async () => (await promise).stderrStr, txt),
+      checkStreamEnd(p, all, async () => (await promise).allStr),
+    ])
+
+    const endings = await checks
+    const { allStr } = await promise
+    expect(p.hasReachedLimit).toBe(false)
+    expect(allStr.length).toBeGreaterThanOrEqual(txt.length + endings[2].length)
+  })
+
+  test('5mb -> stdout - all end is false', async () => {
+    const size = 5 * 1000 * 1000
+    const p = new Subprocess('max-buffer', { args: ['stdout', `${size}`] })
+    const stdout = { stream: new PassThrough(), end: true }
+    const stderr = new PassThrough()
+    const all = { stream: new PassThrough(), end: false }
+    const promise = go(p, { stdout, stderr, all }, true)
+    const txt = '.'.repeat(size) + '\n'
+    const checks = Promise.all([
+      checkStreamEnd(p, stdout, async () => (await promise).stdoutStr, txt),
+      checkStreamEnd(p, stderr, async () => (await promise).stderrStr, ''),
+      checkStreamEnd(p, all, async () => (await promise).allStr),
+    ])
+
+    const endings = await checks
+    const { allStr } = await promise
+    expect(p.hasReachedLimit).toBe(false)
+    expect(allStr.length).toBeGreaterThanOrEqual(txt.length + endings[2].length)
+  })
+})
+
+describe('Stream with end disabled work when limit is reached', () => {
+  test('5mb -> stdout - stdout end is false', async () => {
+    const maxOutputSize = 1 * MB
+    const size = 5 * 1000 * 1000
+    const p = new Subprocess('max-buffer', { maxOutputSize, args: ['stdout', `${size}`] })
+    const stdout = [
+      { stream: new PassThrough(), end: false },
+      { stream: new PassThrough(), end: true },
+    ]
+    const stderr = new PassThrough()
+    const all = new PassThrough()
+    const promise = go(p, { stdout, stderr, all }, true)
+    const txt = '.'.repeat(maxOutputSize)
+    const checks = Promise.all([
+      checkStreamEnd(p, stdout[0], async () => (await promise).stdoutStr[0], txt),
+      checkStreamEnd(p, stdout[1], async () => (await promise).stdoutStr[1], txt),
+      checkStreamEnd(p, stderr, async () => (await promise).stderrStr, ''),
+      checkStreamEnd(p, all, async () => (await promise).allStr),
+    ])
+
+    const endings = await checks
+    const { allStr } = await promise
+    expect(p.hasReachedLimit).toBe(true)
+    expect(allStr.length).toBeGreaterThanOrEqual(txt.length + endings[3].length)
+  })
+
+  test('5mb -> stderr - stderr end is false', async () => {
+    const maxOutputSize = 1 * MB
+    const size = 5 * 1000 * 1000
+    const p = new Subprocess('max-buffer', { maxOutputSize, args: ['stderr', `${size}`] })
+    const stderr = [
+      { stream: new PassThrough(), end: false },
+      { stream: new PassThrough(), end: true },
+    ]
+    const stdout = new PassThrough()
+    const all = new PassThrough()
+    const promise = go(p, { stdout, stderr, all }, true)
+    const txt = '.'.repeat(maxOutputSize)
+    const checks = Promise.all([
+      checkStreamEnd(p, stderr[0], async () => (await promise).stderrStr[0], txt),
+      checkStreamEnd(p, stderr[1], async () => (await promise).stderrStr[1], txt),
+      checkStreamEnd(p, stdout, async () => (await promise).stdoutStr, ''),
+      checkStreamEnd(p, all, async () => (await promise).allStr),
+    ])
+
+    const endings = await checks
+    const { allStr } = await promise
+    expect(p.hasReachedLimit).toBe(true)
+    expect(allStr.length).toBeGreaterThanOrEqual(txt.length + endings[3].length)
+  })
+
+  test('5mb -> stderr - all end is false', async () => {
+    const maxOutputSize = 1 * MB
+    const size = 5 * 1000 * 1000
+    const p = new Subprocess('max-buffer', { maxOutputSize, args: ['stderr', `${size}`] })
+    const stderr = new PassThrough()
+    const stdout = new PassThrough()
+    const all = [
+      { stream: new PassThrough(), end: false },
+      { stream: new PassThrough(), end: true },
+    ]
+    const promise = go(p, { stdout, stderr, all }, true)
+    const txt = '.'.repeat(maxOutputSize)
+    const checks = Promise.all([
+      checkStreamEnd(p, stdout, async () => (await promise).stdoutStr, ''),
+      checkStreamEnd(p, stderr, async () => (await promise).stderrStr, txt),
+      checkStreamEnd(p, all[0], async () => (await promise).allStr[0]),
+      checkStreamEnd(p, all[1], async () => (await promise).allStr[1]),
+    ])
+
+    const endings = await checks
+    const { allStr } = await promise
+    expect(p.hasReachedLimit).toBe(true)
+    expect(allStr[0].length).toBeGreaterThanOrEqual(txt.length + endings[2].length)
+    expect(allStr[1].length).toBeGreaterThanOrEqual(txt.length + endings[3].length)
+  })
+})
+
 describe('Streams work when manual kill', () => {
   test('sigterm-catcher-exit-error.py', async () => {
     const p = new Subprocess('sigterm-catcher-exit-error.py')
@@ -190,6 +347,8 @@ describe('Streams work when manual kill', () => {
     expect(stdoutStr).toBe('14 characters\n')
     expect(stderrStr).toBe('')
   })
+
+  test('End is false', () => {})
 })
 
 describe('Streams work until limit', () => {

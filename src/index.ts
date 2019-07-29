@@ -95,12 +95,6 @@ export class Subprocess {
       const onLimit = () => {
         if (this.limitReached) return
         this.limitReached = true
-        this.proc.all.unpipe()
-        this.proc.all.on('readable', this.proc.all.read.bind(this.proc.all))
-        allArr.forEach(el => {
-          if (el.end) el.stream.end()
-        })
-
         this.kill()
       }
 

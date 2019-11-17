@@ -1,3 +1,5 @@
+.coveralls.yml
+coverage
 .vscode
 build
 node_modules

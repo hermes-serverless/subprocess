@@ -16,7 +16,8 @@
     "format": "prettier --config ./prettier.config.js --write \"src/**/*.ts\" \"src/**/*.js\"",
     "preversion": "yarn lint && yarn format",
     "version": "git add --all",
-    "postversion": "git push && git push --tags"
+    "postversion": "git push && git push --tags",
+    "coverage": "jest --coverage && cat ./coverage/lcov.info | coveralls"
   },
   "repository": {
     "type": "git",
@@ -37,6 +38,7 @@
     "@hermes-serverless/custom-promises": "^0.1.0",
     "@types/jest": "^24.0.11",
     "@types/node": "^12.6.1",
+    "coveralls": "^3.0.7",
     "get-stream": "^5.1.0",
     "jest": "^24.7.1",
     "make-array": "^1.0.5",
